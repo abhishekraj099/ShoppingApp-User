@@ -66,6 +66,9 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.auth.ktx)
     implementation(libs.firebase.storage)
+    implementation(libs.firebase.messaging)
+    implementation(libs.firebase.inappmessaging.display)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -75,7 +78,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
 
-    implementation("androidx.compose.material:material-icons-extended-android")
+    // implementation("androidx.compose.material:material-icons-extended-android")
 
 // this ia for hillt dependency injection
     implementation("com.google.dagger:hilt-android:2.50")
@@ -101,9 +104,17 @@ dependencies {
     implementation ("com.google.accompanist:accompanist-pager:0.28.0")
     implementation ("com.google.accompanist:accompanist-pager-indicators:0.28.0")
 
+// this is for payment getway
+   // implementation ("com.razorpay:checkout:1.6.38")
 
 
+    //custem bottom nev bar
     implementation ("com.canopas.compose-animated-navigationbar:bottombar:1.0.1")
+
+
+    //loatty ani
+    implementation("com.airbnb.android:lottie-compose:4.0.0")
+
 
 
 }

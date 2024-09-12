@@ -26,6 +26,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -35,8 +36,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.shoppingappuser.navigation.Routes
+import com.example.shoppingappuser.screens.utils.AnimatedEmpty
+import com.example.shoppingappuser.screens.utils.AnimatedLoading
 import com.example.shoppingappuser.screens.utils.ProductItem
 import com.example.shoppingappuser.viewModels.ShoppingAppViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,16 +54,19 @@ fun EachCategorieProductScreenUi(
 
     val products = state.value.userData ?: emptyList()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
-
+    val coroutineScope = rememberCoroutineScope()
     LaunchedEffect(key1 = Unit) {
-        viewModel.getSpecifiCategoryItems(categoryName)
+        coroutineScope.launch(Dispatchers.IO) {
+
+            viewModel.getSpecifiCategoryItems(categoryName)
+        }
 
     }
 
     when {
         state.value.isLoading -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                AnimatedLoading()
             }
 
         }
@@ -72,7 +80,7 @@ fun EachCategorieProductScreenUi(
         products.isEmpty() -> {
 
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No Products Available")
+                AnimatedEmpty()
             }
 
         }
@@ -130,7 +138,8 @@ fun EachCategorieProductScreenUi(
                             ProductItem(product = product!!, onProductClick = {
                                 // Navigate to product details
                                 navController.navigate(Routes.EachProductDetailsScreen(product.productId))
-                            })
+                            }
+                            )
                         }
                     }
                 }
@@ -138,6 +147,7 @@ fun EachCategorieProductScreenUi(
         }
     }
 }
+
 
 
 

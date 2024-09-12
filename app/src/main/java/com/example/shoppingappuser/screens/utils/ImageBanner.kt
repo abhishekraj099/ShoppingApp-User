@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -26,51 +27,38 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-
 import com.example.shoppingappuser.domain.models.BannerDataModels
 import com.example.shoppingappuser.ui.theme.SweetPink
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
 
-import androidx.compose.material3.*
-import androidx.compose.ui.graphics.Color
-
-
-
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-
-import androidx.compose.ui.graphics.Brush
-
-import coil.compose.AsyncImage
-import com.google.accompanist.pager.ExperimentalPagerApi
-import com.google.accompanist.pager.HorizontalPager
-import com.google.accompanist.pager.rememberPagerState
-import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 @Composable
-fun Banner(
-    banners: List<BannerDataModels>
-) {
+fun Banner(banners: List<BannerDataModels>) {
     if (banners.isEmpty()) {
-        Text("No banners available")
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(170.dp)
+                .padding(top = 8.dp, start = 15.dp, end = 15.dp)
+        ) {
+            Text("No banners available", modifier = Modifier.align(Alignment.Center))
+        }
         return
     }
 
-    val pagerState = rememberPagerState(initialPage = 0) { banners.size }
+    val pagerState = rememberPagerState(pageCount = { banners.size })
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(banners.size) {
-        while (banners.size > 1) {
+    LaunchedEffect(Unit) {
+        while (true) {
             delay(1500)
-            val nextPage = (pagerState.currentPage + 1) % maxOf(banners.size, 1)
-            pagerState.animateScrollToPage(nextPage)
+            if (banners.isNotEmpty()) {
+                val nextPage = (pagerState.currentPage + 1) % banners.size
+                scope.launch {
+                    pagerState.animateScrollToPage(nextPage)
+                }
+            }
         }
     }
 
@@ -85,7 +73,6 @@ fun Banner(
                 state = pagerState,
                 modifier = Modifier.wrapContentSize()
             ) { currentPage ->
-                val banner = banners.getOrNull(currentPage)
                 Card(
                     modifier = Modifier
                         .height(170.dp)
@@ -93,23 +80,13 @@ fun Banner(
                         .padding(top = 8.dp, start = 15.dp, end = 15.dp),
                     elevation = CardDefaults.elevatedCardElevation(8.dp),
                 ) {
-                    if (banner != null) {
-                        AsyncImage(
-                            model = banner.image,
-                            contentDescription = banner.name,
-                            modifier = Modifier.fillMaxWidth(),
-                            contentScale = ContentScale.Crop,
-                            alignment = Alignment.Center
-                        )
-                    } else {
-                        // Placeholder or error UI
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Banner not available")
-                        }
-                    }
+                    AsyncImage(
+                        model = banners[currentPage].image,
+                        contentDescription = banners[currentPage].name,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.Center
+                    )
                 }
             }
         }
@@ -120,8 +97,6 @@ fun Banner(
         )
     }
 }
-
-// Rest of the code remains the same
 
 @Composable
 fun PageIndicator(pageCount: Int, currentPage: Int, modifier: Modifier) {
@@ -142,7 +117,8 @@ fun IndicatorDot(isSelected: Boolean, modifier: Modifier) {
         SelectedDot(modifier)
     else
         Box(
-            modifier = modifier.padding(2.dp)
+            modifier = modifier
+                .padding(2.dp)
                 .clip(shape = CircleShape)
                 .size(8.dp)
                 .background(color = SweetPink.copy(alpha = 0.5f), CircleShape)

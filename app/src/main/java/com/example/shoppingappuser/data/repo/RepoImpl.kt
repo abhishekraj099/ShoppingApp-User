@@ -11,6 +11,7 @@ import com.example.shoppingappuser.common.USER_COLLECTION
 import com.example.shoppingappuser.domain.models.BannerDataModels
 import com.example.shoppingappuser.domain.models.CartDataModels
 import com.example.shoppingappuser.domain.models.CategoryDataModels
+import com.example.shoppingappuser.domain.models.FavDataModel
 import com.example.shoppingappuser.domain.models.ProductDataModels
 import com.example.shoppingappuser.domain.models.UserData
 import com.example.shoppingappuser.domain.models.UserDataParent
@@ -19,6 +20,7 @@ import com.example.shoppingappuser.domain.repo.Repo
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -43,6 +45,8 @@ class RepoImpl @Inject constructor(
                             .addOnCompleteListener {
                                 if (it.isSuccessful) {
                                     trySend(ResultState.Success("User Registered Successfully and add to Firestore"))
+                                    updateFcmToken(firebaseAuth.currentUser?.uid.toString())
+
                                 } else {
                                     if (it.exception != null) {
                                         trySend(ResultState.Error(it.exception?.localizedMessage.toString()))
@@ -72,6 +76,8 @@ class RepoImpl @Inject constructor(
                 .addOnCompleteListener {
                     if (it.isSuccessful) {
                         trySend(ResultState.Success("User Logged In Successfully"))
+                        updateFcmToken(firebaseAuth.currentUser?.uid.toString())
+
                     } else {
                         if (it.exception != null) {
                             trySend(ResultState.Error(it.exception?.localizedMessage.toString()))
@@ -85,20 +91,31 @@ class RepoImpl @Inject constructor(
 
     override fun getuserById(uid: String): Flow<ResultState<UserDataParent>> = callbackFlow {
         trySend(ResultState.Loading)
+
         firebaseFirestore.collection(USER_COLLECTION)
-            .document(uid).get().addOnCompleteListener {
-                if (it.isSuccessful) {
-                    val data = it.result.toObject(UserData::class.java)!!
-                    val userDataParent = UserDataParent(it.result.id, data)
-                    trySend(ResultState.Success(userDataParent))
-                } else {
-                    if (it.exception != null) {
-                        trySend(ResultState.Error(it.exception?.localizedMessage.toString()))
+            .document(uid).get()
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val document = task.result
+                    if (document != null && document.exists()) {
+                        val data = document.toObject(UserData::class.java)
+                        if (data != null) {
+                            val userDataParent = UserDataParent(document.id, data)
+                            trySend(ResultState.Success(userDataParent))
+                        } else {
+                            trySend(ResultState.Error("Failed to parse user data"))
+                        }
+                    } else {
+                        trySend(ResultState.Error("User not found"))
                     }
+                } else {
+                    val errorMessage = task.exception?.localizedMessage ?: "Unknown error occurred"
+                    trySend(ResultState.Error(errorMessage))
                 }
             }
+
         awaitClose {
-            close()
+            // If you need to cancel any ongoing operations, do it here
         }
     }
 
@@ -239,14 +256,14 @@ class RepoImpl @Inject constructor(
 
         }
 
-    override fun addtoFav(productDataModels: ProductDataModels): Flow<ResultState<String>> =
+    override fun addtoFav(favDataModel: FavDataModel): Flow<ResultState<String>> =
         callbackFlow {
             trySend(ResultState.Loading)
             firebaseFirestore.collection(ADDTOFAV).document(firebaseAuth.currentUser!!.uid)
                 .collection(
                     "User_Fav"
 
-                ).add(productDataModels)
+                ).add(favDataModel)
                 .addOnSuccessListener {
                     trySend(ResultState.Success("Product Added To Fav"))
                 }.addOnFailureListener {
@@ -258,12 +275,34 @@ class RepoImpl @Inject constructor(
 
         }
 
-    override fun getAllFav(): Flow<ResultState<List<ProductDataModels>>> = callbackFlow {
+    override fun unFav(itemID: String): Flow<ResultState<String>> =
+        callbackFlow {
+            trySend(ResultState.Loading)
+            firebaseFirestore.collection(ADDTOFAV).document(firebaseAuth.currentUser!!.uid)
+                .collection("User_Fav").document(itemID).delete().addOnSuccessListener {
+                    trySend(ResultState.Success("Product Removed From Fav"))
+                    Log.d("test", "unFav: $itemID")
+
+                }.addOnFailureListener {
+                    trySend(ResultState.Error(it.toString()))
+                    Log.d("test", "unFav: ${it.toString()}")
+
+                }
+            awaitClose {
+                close()
+            }
+
+        }
+
+    override fun getAllFav(): Flow<ResultState<List<FavDataModel>>> = callbackFlow {
         trySend(ResultState.Loading)
         firebaseFirestore.collection(ADDTOFAV).document(firebaseAuth.currentUser!!.uid)
             .collection("User_Fav").get().addOnSuccessListener {
                 val fav = it.documents.mapNotNull { document ->
-                    document.toObject(ProductDataModels::class.java)
+                    document.toObject(FavDataModel::class.java)?.apply {
+                        favId = document.id
+
+                    }
                 }
                 trySend(ResultState.Success(fav))
             }.addOnFailureListener {
@@ -353,20 +392,73 @@ class RepoImpl @Inject constructor(
         }
     }
 
-    override fun getSpecificCategoryItems(categoryName: String): Flow<ResultState<List<ProductDataModels>>> = callbackFlow {
-        trySend(ResultState.Loading)
-        firebaseFirestore.collection("Products").whereEqualTo("category", categoryName).get().addOnSuccessListener {
-            val products = it.documents.mapNotNull { document ->
-                document.toObject(ProductDataModels::class.java)?.apply {
-                    productId = document.id
+    override fun getSpecificCategoryItems(categoryName: String): Flow<ResultState<List<ProductDataModels>>> =
+        callbackFlow {
+            trySend(ResultState.Loading)
+            firebaseFirestore.collection("Products").whereEqualTo("category", categoryName).get()
+                .addOnSuccessListener {
+                    val products = it.documents.mapNotNull { document ->
+                        document.toObject(ProductDataModels::class.java)?.apply {
+                            productId = document.id
+                        }
+                    }
+                    trySend(ResultState.Success(products))
+                }.addOnFailureListener {
+                    trySend(ResultState.Error(it.toString()))
                 }
+            awaitClose {
             }
-            trySend(ResultState.Success(products))
-        }.addOnFailureListener {
-            trySend(ResultState.Error(it.toString()))
-        }
-        awaitClose {
+
         }
 
+    override fun deleteFromCart(itemID: String): Flow<ResultState<String>> = callbackFlow {
+        trySend(ResultState.Loading)
+
+        firebaseFirestore.collection(ADD_TO_CART).document(firebaseAuth.currentUser!!.uid)
+            .collection("User_Cart").document(itemID).delete().addOnSuccessListener {
+                trySend(ResultState.Success("Item Deleted From Cart"))
+            }.addOnFailureListener {
+                trySend(ResultState.Error(it.toString()))
+            }
+        awaitClose {
+
+        }
     }
+
+    override fun searchProducts(query: String): Flow<ResultState<List<ProductDataModels>>> =
+        callbackFlow {
+            trySend(ResultState.Loading)
+            firebaseFirestore.collection("Products") .orderBy("name")
+                .startAt(query).get()
+                .addOnSuccessListener {
+                    val products = it.documents.mapNotNull { document ->
+                        document.toObject(ProductDataModels::class.java)?.apply {
+                            productId = document.id
+                        }
+                    }
+                    trySend(ResultState.Success(products))
+                }.addOnFailureListener {
+                    trySend(ResultState.Error(it.toString()))
+                }
+            awaitClose {
+                close()
+            }
+        }
+
+
+
+
+    // this is test , i am takeing user tocken in firebase
+    fun updateFcmToken(userId: String) {
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val token = task.result
+                firebaseFirestore.collection("user_tokens").document(userId)
+                    .set(mapOf("token" to token))
+            }
+        }
+    }
+
 }
+
+

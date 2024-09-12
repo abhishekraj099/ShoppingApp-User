@@ -2,6 +2,7 @@ package com.example.shoppingappuser.viewModels
 
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.viewModelScope
 
 
@@ -18,6 +19,7 @@ import com.example.shoppingappuser.common.HomeScreenState
 import com.example.shoppingappuser.common.ResultState
 import com.example.shoppingappuser.domain.models.CartDataModels
 import com.example.shoppingappuser.domain.models.CategoryDataModels
+import com.example.shoppingappuser.domain.models.FavDataModel
 import com.example.shoppingappuser.domain.models.ProductDataModels
 import com.example.shoppingappuser.domain.models.UserData
 import com.example.shoppingappuser.domain.models.UserDataParent
@@ -26,6 +28,7 @@ import com.example.shoppingappuser.domain.models.UserDataParent
 import com.example.shoppingappuser.domain.use_Case.AddToFavUseCase
 import com.example.shoppingappuser.domain.use_Case.AddtoCardUseCase
 import com.example.shoppingappuser.domain.use_Case.CreateUserUseCase
+import com.example.shoppingappuser.domain.use_Case.DeleteFromCartUseCase
 import com.example.shoppingappuser.domain.use_Case.GetAllCategoriesUseCase
 import com.example.shoppingappuser.domain.use_Case.GetAllFavUseCase
 import com.example.shoppingappuser.domain.use_Case.GetAllProductUseCase
@@ -35,15 +38,23 @@ import com.example.shoppingappuser.domain.use_Case.GetCheckOutUseCase
 import com.example.shoppingappuser.domain.use_Case.GetSpecifiCategoryItems
 import com.example.shoppingappuser.domain.use_Case.GetUserUseCase
 import com.example.shoppingappuser.domain.use_Case.LoginUserUseCase
+import com.example.shoppingappuser.domain.use_Case.SearchProductsUseCase
+import com.example.shoppingappuser.domain.use_Case.UnfavUseCase
 import com.example.shoppingappuser.domain.use_Case.UpDateUserDataUseCase
 import com.example.shoppingappuser.domain.use_Case.getCategoryInLimit
 import com.example.shoppingappuser.domain.use_Case.getProductByID
 import com.example.shoppingappuser.domain.use_Case.getProductsInLimitUseCase
 import com.example.shoppingappuser.domain.use_Case.userProfileImageUseCase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.update
 
 
+@OptIn(FlowPreview::class)
 @HiltViewModel
 class ShoppingAppViewModel @Inject constructor(
     private val createUserUseCase: CreateUserUseCase,
@@ -63,11 +74,15 @@ class ShoppingAppViewModel @Inject constructor(
     private val getCheckOutUseCase : GetCheckOutUseCase,
     private val getBannerUseCase: GetBannerUseCase,
     private val getSpecifiCategoryItems: GetSpecifiCategoryItems,
-
-    ) : ViewModel() {
+    private val deleteFromCartUseCase: DeleteFromCartUseCase,
+    private val unFavUseCase: UnfavUseCase,
+    private val SearchProductsUseCase: SearchProductsUseCase
+) : ViewModel() {
 
     private val _singUpScreenState = MutableStateFlow(SignUpScreenState())
     val singUpScreenState = _singUpScreenState.asStateFlow()
+
+
 
     private val _loginScreenState = MutableStateFlow(LoginScreenState())
     val loginScreenState = _loginScreenState.asStateFlow()
@@ -121,12 +136,122 @@ class ShoppingAppViewModel @Inject constructor(
     private val _getSpecifiCategoryItemsState = MutableStateFlow(GetSpecifiCategoryItemsState())
     val getSpecifiCategoryItemsState = _getSpecifiCategoryItemsState.asStateFlow()
 
+    private val _deleteFromCartState = MutableStateFlow(DeleteFromCartState())
+    val deleteFromCartState = _deleteFromCartState.asStateFlow()
+
+    private val _unFavState = MutableStateFlow(UnFavState())
+    val unFavState = _unFavState.asStateFlow()
+
+    val _searchQuery = MutableStateFlow("") // Query state flow
+
+    private val _searchProductsState = MutableStateFlow(SearchProductsState())
+    val searchProductsState = _searchProductsState.asStateFlow()
+
+    fun onSearchQueryChanged(query: String) {
+        _searchQuery.value = query
+    }
+
+
+    fun searchQuery(){
+        viewModelScope.launch(context = Dispatchers.IO) {
+            _searchQuery
+                .debounce(500L) // 500ms debounce time
+                .distinctUntilChanged()
+                .collect { query ->
+                    if (query.isNotEmpty()) {
+                        searchProducts(query)
+                    }
+                }
+        }
+    }
+
+    fun searchProducts(query: String){
+        Log.d("Search", "Searching for: $query")
+
+        viewModelScope.launch(Dispatchers.IO) {
+            SearchProductsUseCase.searchProducts(query).collect{
+                when(it){
+                    is ResultState.Error -> {
+                        _searchProductsState.value = _searchProductsState.value.copy(
+                            isLoading = false,
+                            errorMessage = it.message
+                        )
+                    }
+                    is ResultState.Loading -> {
+                        _searchProductsState.value = _searchProductsState.value.copy(
+                            isLoading = true
+                        )
+                    }
+                    is ResultState.Success -> {
+                        Log.d("Search", "Search results: ${it.data}")
+                        _searchProductsState.value = _searchProductsState.value.copy(
+                            isLoading = false,
+                            userData = it.data
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+
+    fun unFav(itemID: String){
+        viewModelScope.launch(Dispatchers.IO) {
+            unFavUseCase.unfav(itemId = itemID).collect{
+                when(it){
+                    is ResultState.Error -> {
+                        _unFavState.value = _unFavState.value.copy(
+                            isLoading = false,
+                            errorMessage = it.message)
+                    }
+                    is ResultState.Loading -> {
+                        _unFavState.value = _unFavState.value.copy(
+                            isLoading = true
+                        )
+                    }
+                    is ResultState.Success -> {
+                        _unFavState.value = _unFavState.value.copy(
+                            isLoading = false,
+                            userData = it.data
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun deleteFromCart(itemID: String){
+        viewModelScope.launch(Dispatchers.IO) {
+            deleteFromCartUseCase.deleteFromCart(itemID).collect{
+                when(it){
+                    is ResultState.Error -> {
+                        _deleteFromCartState.value = _deleteFromCartState.value.copy(
+                            isLoading = false,
+                            errorMessage = it.message
+                        )
+                    }
+                    is ResultState.Loading -> {
+                        _deleteFromCartState.value = _deleteFromCartState.value.copy(
+                            isLoading = true
+                        )
+                    }
+                    is ResultState.Success -> {
+                        _deleteFromCartState.value = _deleteFromCartState.value.copy(
+                            isLoading = false,
+                            userData = it.data
+                        )
+                    }
+                }
+            }
+        }
+    }
+
 
 
     fun getSpecifiCategoryItems(
         categoryName : String
     ){
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             getSpecifiCategoryItems.getSpecifiCategoryItems(categoryName).collect{
                 when(it){
                     is ResultState.Error -> {
@@ -187,7 +312,7 @@ class ShoppingAppViewModel @Inject constructor(
 
 
     fun getAllCategories(){
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             getAllCategoriesUseCase.getAllCategoriesUseCase().collect{
                 when(it){
                     is ResultState.Error -> {
@@ -215,7 +340,7 @@ class ShoppingAppViewModel @Inject constructor(
 
 
     fun getCart(){
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             getCartUseCase.getCart().collect {
                 when(it){
                     is ResultState.Error -> {
@@ -243,7 +368,7 @@ class ShoppingAppViewModel @Inject constructor(
 
 
     fun getAllProducts(){
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             getAllProductsUseCase.getAllProduct().collect{
                 when(it){
                     is ResultState.Loading -> {
@@ -272,7 +397,7 @@ class ShoppingAppViewModel @Inject constructor(
 
 
     fun getAllFav(){
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             getAllFavUseCase.getAllFav().collect{
                 when(it){
                     is ResultState.Error -> {
@@ -299,9 +424,9 @@ class ShoppingAppViewModel @Inject constructor(
 
 
 
-    fun addToFav(productDataModels: ProductDataModels){
-        viewModelScope.launch {
-            addtoFavUseCase.addtoFav(productDataModels).collect{
+    fun addToFav(favDataModel : FavDataModel){
+        viewModelScope.launch(Dispatchers.IO) {
+            addtoFavUseCase.addtoFav(favDataModel).collect{
                 when(it){
                     is ResultState.Error -> {
                         _addtoFavState.value = _addtoFavState.value.copy(
@@ -330,7 +455,7 @@ class ShoppingAppViewModel @Inject constructor(
 
 
     fun getProductByID(productId: String){
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             getProductByID.getProductById(productId).collect{
                 when(it){
                     is ResultState.Error -> {
@@ -360,7 +485,7 @@ class ShoppingAppViewModel @Inject constructor(
     fun addToCart(
         cartDataModels: CartDataModels
     ){
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             addtoCardUseCase.addtoCard( cartDataModels ).collect{
                 when(it){
                     is ResultState.Error -> {
@@ -391,6 +516,8 @@ class ShoppingAppViewModel @Inject constructor(
 
     init {
         loadHomeScreenData()
+        searchQuery()
+
     }
 
 
@@ -400,7 +527,7 @@ class ShoppingAppViewModel @Inject constructor(
 
 
     fun loadHomeScreenData() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             combine(
                 getCategoryInLimit.getCategoriesInLimited(),
                 getProductsInLimitUseCase.getProductsInLimit(),
@@ -437,7 +564,7 @@ class ShoppingAppViewModel @Inject constructor(
 
 
     fun upLoadUserProfileImage(uri: Uri) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             userProfileImageUseCase.userProfileImage(uri).collect {
                 when (it) {
                     is ResultState.Error -> {
@@ -468,7 +595,7 @@ class ShoppingAppViewModel @Inject constructor(
     fun upDateUserData(
         userDataParent: UserDataParent
     ) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             upDateUserDataUseCase.upDateUserData(userDataParent = userDataParent).collect {
                 when (it) {
                     is ResultState.Error -> {
@@ -498,7 +625,7 @@ class ShoppingAppViewModel @Inject constructor(
 
 
     fun createUser(userData: UserData) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             createUserUseCase.createUser(userData).collect {
                 when (it) {
                     is ResultState.Error -> {
@@ -528,7 +655,7 @@ class ShoppingAppViewModel @Inject constructor(
 
 
     fun loginUser(userData: UserData) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             loginUserUseCase.loginUser(userData).collect {
                 when (it) {
                     is ResultState.Error -> {
@@ -559,29 +686,35 @@ class ShoppingAppViewModel @Inject constructor(
 
     fun getUserById(uid: String) {
         viewModelScope.launch {
-            getUserUseCase.getuserById(uid).collectLatest {
-                when (it) {
-                    is ResultState.Error -> {
-                        _profileScreenState.value = _profileScreenState.value.copy(
-                            isLoading = false,
-                            errorMessage = it.message
-                        )
+            try {
+                _profileScreenState.update { it.copy(isLoading = true, errorMessage = null) }
 
-                    }
-
-                    ResultState.Loading -> {
-                        _profileScreenState.value = _profileScreenState.value.copy(
-                            isLoading = true
-                        )
-                    }
-
-                    is ResultState.Success -> {
-                        _profileScreenState.value = _profileScreenState.value.copy(
-                            isLoading = false,
-                            userData = it.data
-                        )
+                getUserUseCase.getuserById(uid).collectLatest { result ->
+                    _profileScreenState.update { state ->
+                        when (result) {
+                            is ResultState.Error -> state.copy(
+                                isLoading = false,
+                                errorMessage = result.message,
+                                userData = null
+                            )
+                            is ResultState.Loading -> state.copy(
+                                isLoading = true,
+                                errorMessage = null
+                            )
+                            is ResultState.Success -> state.copy(
+                                isLoading = false,
+                                errorMessage = null,
+                                userData = result.data
+                            )
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                _profileScreenState.update { it.copy(
+                    isLoading = false,
+                    errorMessage = "An unexpected error occurred: ${e.localizedMessage}",
+                    userData = null
+                ) }
             }
         }
     }
@@ -639,7 +772,7 @@ data class GetProductByIDState(
 data class AddtoFavState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val userData: String? = null
+    var userData: String? = null
 
 )
 
@@ -647,7 +780,7 @@ data class AddtoFavState(
 data class GetAllFavState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val userData: List<ProductDataModels?> = emptyList()
+    val userData: List<FavDataModel?> = emptyList()
 
 )
 
@@ -689,3 +822,27 @@ data class GetSpecifiCategoryItemsState(
     val userData: List<ProductDataModels?> = emptyList()
 
 )
+
+
+
+data class DeleteFromCartState(
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    var userData: String? = null
+
+)
+
+data class UnFavState(
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    var userData: String? = null
+
+)
+
+data class SearchProductsState(
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    val userData: List<ProductDataModels?> = emptyList()
+
+)
+

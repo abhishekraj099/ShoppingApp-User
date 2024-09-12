@@ -1,5 +1,6 @@
 package com.example.shoppingappuser.screens
 
+import android.content.Context
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -21,8 +23,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,10 +37,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,20 +63,31 @@ import coil.compose.SubcomposeAsyncImageContent
 import com.example.shoppingappuser.domain.models.UserData
 import com.example.shoppingappuser.domain.models.UserDataParent
 import com.example.shoppingappuser.navigation.SubNavigation
+import com.example.shoppingappuser.screens.utils.AnimatedLoading
 import com.example.shoppingappuser.screens.utils.LogOutAlertDialog
 import com.example.shoppingappuser.ui.theme.SweetPink
 import com.example.shoppingappuser.viewModels.ShoppingAppViewModel
+import com.example.shoppingappuser.viewModels.UpDateScreenState
+import com.example.shoppingappuser.viewModels.uploadUserProfileImageState
 
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreenUi(
     viewModel: ShoppingAppViewModel = hiltViewModel(),
     firebaseAuth: FirebaseAuth,
     navController: NavController
 ) {
+
+    val coroutineScope = rememberCoroutineScope()
+
     LaunchedEffect(key1 = true) {
-        viewModel.getUserById(firebaseAuth.currentUser!!.uid)
+        coroutineScope.launch(Dispatchers.IO) {
+
+            viewModel.getUserById(firebaseAuth.currentUser!!.uid)}
 
     }
     val profileScreenState = viewModel.profileScreenState.collectAsStateWithLifecycle()
@@ -94,13 +116,16 @@ fun ProfileScreenUi(
         remember { mutableStateOf(profileScreenState.value.userData?.userData?.address ?: "") }
 
     LaunchedEffect(profileScreenState.value.userData) {
-        profileScreenState.value.userData?.userData?.let { userData ->
-            firstName.value = userData.fastName ?: ""
-            lastName.value = userData.lastName ?: ""
-            email.value = userData.email ?: ""
-            phoneNumber.value = userData.phoneNumber ?: ""
-            address.value = userData.address ?: ""
-            imageUrl.value = userData.profileImage ?: ""
+        coroutineScope.launch(Dispatchers.IO) {
+
+            profileScreenState.value.userData?.userData?.let { userData ->
+                firstName.value = userData.fastName ?: ""
+                lastName.value = userData.lastName ?: ""
+                email.value = userData.email ?: ""
+                phoneNumber.value = userData.phoneNumber ?: ""
+                address.value = userData.address ?: ""
+                imageUrl.value = userData.profileImage ?: ""
+            }
         }
     }
 
@@ -123,7 +148,7 @@ fun ProfileScreenUi(
         Toast.makeText(context, upDateScreenState.value.errorMessage, Toast.LENGTH_SHORT).show()
     } else if (upDateScreenState.value.isLoading) {
         Box(modifier = Modifier.fillMaxSize()) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            AnimatedLoading()
         }
     }
 
@@ -136,19 +161,14 @@ fun ProfileScreenUi(
         Toast.makeText(context, userProfileImageState.value.errorMessage, Toast.LENGTH_SHORT).show()
     } else if (userProfileImageState.value.isLoading) {
         Box(modifier = Modifier.fillMaxSize()) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            AnimatedLoading()
         }
     }
 
 
-
-
-
-
-
     if (profileScreenState.value.isLoading) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            AnimatedLoading()
         }
     } else if (profileScreenState.value.errorMessage != null) {
         Text(text = profileScreenState.value.errorMessage!!)
@@ -156,12 +176,20 @@ fun ProfileScreenUi(
     } else if (profileScreenState.value.userData != null) {
 
         Scaffold(
+            topBar = {
+                TopAppBar(title = {
+                    Text(
+                        "Profile", fontWeight = FontWeight.Bold,
+                    )
+                })
+            }
 
         ) { innerPadding ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding).padding(16.dp),
+                    .padding(innerPadding)
+                    .padding(16.dp),
                 verticalArrangement = Arrangement.Center
             ) {
 
@@ -183,7 +211,11 @@ fun ProfileScreenUi(
                     ) {
                         when (painter.state) {
                             is AsyncImagePainter.State.Loading -> CircularProgressIndicator()
-                            is AsyncImagePainter.State.Error -> Icon(Icons.Default.Person, contentDescription = null)
+                            is AsyncImagePainter.State.Error -> Icon(
+                                Icons.Default.Person,
+                                contentDescription = null
+                            )
+
                             else -> SubcomposeAsyncImageContent()
                         }
                     }
@@ -197,7 +229,11 @@ fun ProfileScreenUi(
                                 .align(Alignment.BottomEnd)
                                 .background(MaterialTheme.colorScheme.primary, CircleShape)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Change Picture", tint = Color.White)
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Change Picture",
+                                tint = Color.White
+                            )
                         }
                     }
                 }

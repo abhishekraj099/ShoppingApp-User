@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -31,12 +33,14 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -44,8 +48,12 @@ import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.example.shoppingappuser.domain.models.CartDataModels
+import com.example.shoppingappuser.screens.utils.AnimatedEmpty
+import com.example.shoppingappuser.screens.utils.AnimatedLoading
 import com.example.shoppingappuser.ui.theme.SweetPink
 import com.example.shoppingappuser.viewModels.ShoppingAppViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,11 +63,24 @@ fun CartScreenUi(
     navController: NavController
 ) {
     val cartState = viewModel.getCartState.collectAsStateWithLifecycle()
+    val deleteFromCartState = viewModel.deleteFromCartState.collectAsStateWithLifecycle()
     val cartData = cartState.value.userData ?: emptyList()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
-
+    val coroutineScope = rememberCoroutineScope()
     LaunchedEffect(key1 = Unit) {
-        viewModel.getCart()
+        coroutineScope.launch(Dispatchers.IO) {
+
+            viewModel.getCart()}
+    }
+
+    LaunchedEffect(key1 = deleteFromCartState.value.userData) {
+        coroutineScope.launch(Dispatchers.IO) {
+
+            if (deleteFromCartState.value.userData != null) {
+                viewModel.getCart() // Refresh the cart data
+            }
+            viewModel.deleteFromCartState.value.userData = null
+        }
     }
 
     Scaffold(
@@ -71,22 +92,13 @@ fun CartScreenUi(
                 title = {
                     Text(
                         text = "Shopping Cart",
-                        style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                     )
                 },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
+
                 scrollBehavior = scrollBehavior
 
             )
-
-
-
-
 
 
         },
@@ -97,15 +109,16 @@ fun CartScreenUi(
                 .padding(innerPadding)
         ) {
             when {
-                cartState.value.isLoading -> {
+                cartState.value.isLoading || deleteFromCartState.value.isLoading -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator()
+                        AnimatedLoading()
                     }
                 }
-                cartState.value.errorMessage != null -> {
+
+                cartState.value.errorMessage != null || deleteFromCartState.value.errorMessage != null -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -114,14 +127,20 @@ fun CartScreenUi(
                         Text("Sorry, Unable to Get Information")
                     }
                 }
+//                deleteFromCartState.value.userData != null -> {
+//
+//
+//                }
+
                 cartData.isEmpty() -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No Products Available")
+                        AnimatedEmpty()
                     }
                 }
+
                 else -> {
                     Column(
                         modifier = Modifier
@@ -162,7 +181,9 @@ fun CartScreenUi(
                             modifier = Modifier.weight(.6f)
                         ) {
                             items(cartData) { item ->
-                                CartItemCard(item = item!!)
+                                CartItemCard(
+                                    item = item!!,
+                                    onDelete = { viewModel.deleteFromCart(item.cartId) })
                             }
                         }
 
@@ -205,7 +226,7 @@ fun CartScreenUi(
 }
 
 @Composable
-fun CartItemCard(item: CartDataModels) {
+fun CartItemCard(item: CartDataModels, onDelete: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -229,20 +250,18 @@ fun CartItemCard(item: CartDataModels) {
                     .padding(start = 16.dp)
             ) {
                 Text(
-                    text = item.name,
+                    text = item!!.name,
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+
                 )
                 Text(
-                    text = "Size: ${item.size}",
+                    text = "Size: ${item?.size}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-//                Text(
-//                    text = "Color: ${item.color}",
-//                    style = MaterialTheme.typography.bodyMedium,
-//                    color = MaterialTheme.colorScheme.onSurfaceVariant
-//                )
                 Text(
                     text = "Rs ${item.price}",
                     style = MaterialTheme.typography.bodyMedium,
@@ -256,17 +275,20 @@ fun CartItemCard(item: CartDataModels) {
                     text = "QTY: ${item.quantity}",
                     style = MaterialTheme.typography.bodyMedium
                 )
-//                Text(
-//                    text = "Rs ${item.price * item.quantity}",
-//                    style = MaterialTheme.typography.bodyMedium,
-//                    fontWeight = FontWeight.Bold
-//                )
+                Text(
+                    text = "Rs ${item.price.toInt() * item.quantity.toInt()}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+
+                IconButton(onClick = { onDelete() }
+
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                }
             }
         }
     }
 }
-
-
-
-
-

@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,8 +43,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
+import com.example.shoppingappuser.screens.utils.AnimatedEmpty
+import com.example.shoppingappuser.screens.utils.AnimatedLoading
 import com.example.shoppingappuser.ui.theme.SweetPink
 import com.example.shoppingappuser.viewModels.ShoppingAppViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,11 +57,12 @@ fun CheckOutScreenUi(
     viewModel: ShoppingAppViewModel = hiltViewModel(),
     navController: NavHostController,
     productID: String,
-
-    ) {
+    pay: () -> Unit
+) {
     val state = viewModel.getProductByIDState.collectAsStateWithLifecycle()
     val productData = state.value.userData
 
+    val coroutineScope = rememberCoroutineScope()
     val email = remember { mutableStateOf("") }
     val country = remember { mutableStateOf("") }
     val firstName = remember { mutableStateOf("") }
@@ -70,13 +76,20 @@ fun CheckOutScreenUi(
 
 
     LaunchedEffect(key1 = Unit) {
-        viewModel.getProductByID(productID)
+        coroutineScope.launch(Dispatchers.IO) {
+
+            viewModel.getProductByID(productID)
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Shipping") },
+                title = {
+                    Text(
+                        "Shipping", fontWeight = FontWeight.Bold,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -93,7 +106,7 @@ fun CheckOutScreenUi(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    AnimatedLoading()
                 }
             }
 
@@ -112,7 +125,7 @@ fun CheckOutScreenUi(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No Products Available")
+                    AnimatedEmpty()
                 }
             }
 
@@ -242,9 +255,10 @@ fun CheckOutScreenUi(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Button(
-
                         onClick = {
-                          // logic off payment screen should implement here
+                            pay.invoke(
+                            )
+
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(SweetPink)
@@ -260,3 +274,4 @@ fun CheckOutScreenUi(
         }
     }
 }
+

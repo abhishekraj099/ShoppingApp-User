@@ -52,7 +52,6 @@ import com.example.shoppingappuser.screens.utils.SuccessAlertDialog
 import com.example.shoppingappuser.ui.theme.SweetPink
 import com.example.shoppingappuser.viewModels.ShoppingAppViewModel
 
-
 @Composable
 fun SingUpScreenUi(
     viewModel: ShoppingAppViewModel = hiltViewModel(),

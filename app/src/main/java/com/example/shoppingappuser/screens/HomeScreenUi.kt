@@ -58,12 +58,16 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 
 import androidx.compose.material3.*
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,11 +79,19 @@ import coil.compose.AsyncImage
 import com.example.shoppingappuser.domain.models.CategoryDataModels
 import com.example.shoppingappuser.domain.models.ProductDataModels
 import com.example.shoppingappuser.navigation.Routes
+import com.example.shoppingappuser.screens.utils.AnimatedLoading
 import com.example.shoppingappuser.screens.utils.Banner
 
 import com.example.shoppingappuser.ui.theme.SweetPink
+import kotlinx.coroutines.FlowPreview
 
-@OptIn(ExperimentalMaterial3Api::class)
+
+
+import androidx.compose.foundation.lazy.grid.items
+
+
+
+@OptIn(ExperimentalMaterial3Api::class, FlowPreview::class)
 @Composable
 fun HomeScreenUi(
     viewModel: ShoppingAppViewModel = hiltViewModel(),
@@ -87,9 +99,15 @@ fun HomeScreenUi(
 ) {
     val homeState by viewModel.homeScreenState.collectAsStateWithLifecycle()
 
+    val SeachState by viewModel.searchProductsState.collectAsStateWithLifecycle()
+
+
+    val query = remember { mutableStateOf("") }
+
+
     if (homeState.isLoading) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            AnimatedLoading()
         }
     } else if (homeState.errorMessage != null) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -107,7 +125,7 @@ fun HomeScreenUi(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
+                //.verticalScroll(rememberScrollState())
             ) {
                 // Search Bar and Notifications
                 Row(
@@ -117,8 +135,11 @@ fun HomeScreenUi(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextField(
-                        value = "",
-                        onValueChange = {},
+                        value = query.value,
+                        onValueChange = {
+                            query.value = it
+                            viewModel.onSearchQueryChanged(it)
+                        },
                         placeholder = { Text("Search") },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         modifier = Modifier.weight(1f),
@@ -133,77 +154,101 @@ fun HomeScreenUi(
                         Icon(Icons.Default.Notifications, contentDescription = null)
                     }
                 }
+                if (query.value.isNotEmpty() && SeachState.userData.isNotEmpty()) {
+                    Text("Found ${SeachState.userData.size} products", modifier = Modifier.padding(16.dp))
 
-                // Categories Section
-                Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Categories", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "See more", color = SweetPink,
-                            modifier = Modifier.clickable {
-                                navController.navigate(Routes.AllCategoriesScreen)
-                            },
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                    LazyRow(
+                    LazyVerticalGrid(
                         modifier = Modifier.fillMaxWidth(),
+                        columns = GridCells.Fixed(2),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+
                         contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(homeState.categories ?: emptyList()) { category ->
-                            CategoryItem(
-                                ImageUrl = category.categoryImage,
-                                Category = category.name,
-                                onClick = {
-                                    navController.navigate(Routes.EachCategoryItemsScreen(categoryName = category.name))
-                                }
+                        items(SeachState.userData ?: emptyList()) { product ->
+                            ProductCard(
+                                product = product!!,
+                                navController = navController
                             )
                         }
                     }
-                }
+                } else {
 
-
-
-                homeState.banners?.let { banners ->
-                    Banner(banners = banners)
-                }
-
-                // Flash Sale Section
-                Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Flash Sale", style = MaterialTheme.typography.titleMedium)
-
-                        Text(
-                            "See more",
-                            color = SweetPink,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.clickable {
-                                // Handle "See more" click
-                                navController.navigate(Routes.SeeAllProductsScreen)
-                            }
-                        )
-                    }
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(homeState.products ?: emptyList()) { product ->
-                            ProductCard(
-                                product = product,
-                                navController = navController
+                    // Categories Section
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Categories", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "See more", color = SweetPink,
+                                modifier = Modifier.clickable {
+                                    navController.navigate(Routes.AllCategoriesScreen)
+                                },
+                                style = MaterialTheme.typography.bodyMedium
                             )
+                        }
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(homeState.categories ?: emptyList()) { category ->
+                                CategoryItem(
+                                    ImageUrl = category.categoryImage,
+                                    Category = category.name,
+                                    onClick = {
+                                        navController.navigate(
+                                            Routes.EachCategoryItemsScreen(
+                                                categoryName = category.name
+                                            )
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+
+
+                    homeState.banners?.let { banners ->
+                        Banner(banners = banners)
+                    }
+
+                    // Flash Sale Section
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Flash Sale", style = MaterialTheme.typography.titleMedium)
+
+                            Text(
+                                "See more",
+                                color = SweetPink,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.clickable {
+                                    // Handle "See more" click
+                                    navController.navigate(Routes.SeeAllProductsScreen)
+                                }
+                            )
+                        }
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(homeState.products ?: emptyList()) { product ->
+                                ProductCard(
+                                    product = product,
+                                    navController = navController
+                                )
+                            }
                         }
                     }
                 }
@@ -216,14 +261,16 @@ fun HomeScreenUi(
 fun CategoryItem(
     ImageUrl: String,
     Category: String,
-    onClick : () -> Unit
+    onClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(end = 16.dp).clickable {
-            onClick()
+        modifier = Modifier
+            .padding(end = 16.dp)
+            .clickable {
+                onClick()
 
-        }
+            }
     ) {
         Box(
             modifier = Modifier
@@ -261,10 +308,8 @@ fun ProductCard(product: ProductDataModels, navController: NavController) {
 
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
-                    .width(
-                        100.dp
-                    )
+                    // .height(150.dp)
+                    // .width(100.dp)
 
                     .clip(RoundedCornerShape(8.dp))
                     .aspectRatio(1f),

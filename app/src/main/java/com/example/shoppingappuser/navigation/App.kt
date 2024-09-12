@@ -87,10 +87,30 @@ import com.example.shoppingappuser.screens.SingUpScreenUi
 import com.example.shoppingappuser.ui.theme.SweetPink
 
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.outlined.Favorite
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+
+
 @Composable
-fun App(firebaseAuth: FirebaseAuth ) {
-
-
+fun App(firebaseAuth: FirebaseAuth) {
     val navController = rememberNavController()
 
     var selectedItem by remember { mutableIntStateOf(0) }
@@ -111,8 +131,7 @@ fun App(firebaseAuth: FirebaseAuth ) {
         BottomNavItem("WishList", Icons.Default.Favorite, unseletedIcon = Icons.Outlined.Favorite),
         BottomNavItem("Cart", Icons.Default.ShoppingCart, unseletedIcon = Icons.Outlined.ShoppingCart),
         BottomNavItem("Profile", Icons.Default.Person, unseletedIcon = Icons.Outlined.Person),
-
-        )
+    )
 
     var startScreen = if (firebaseAuth.currentUser == null) {
         SubNavigation.LoginSingUpScreen
@@ -121,32 +140,22 @@ fun App(firebaseAuth: FirebaseAuth ) {
     }
 
     Scaffold(
-        // Modifier.fillMaxSize(),
         bottomBar = {
             if (shouldShowBottomBar.value) {
-
                 AnimatedBottomBar(
                     selectedItem = selectedItem,
                     itemSize = BottomNavItem.size,
                     modifier = Modifier.padding(bottom = 8.dp),
-
                     containerColor = Color.Transparent,
-                    // indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                     indicatorColor = SweetPink,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-
                     indicatorDirection = IndicatorDirection.BOTTOM,
-
-
                     indicatorStyle = IndicatorStyle.FILLED
-
-
                 ) {
                     BottomNavItem.forEachIndexed { index, navigationItem ->
                         BottomBarItem(
                             selected = selectedItem == index,
                             onClick = {
-
                                 selectedItem = index
                                 when (index) {
                                     0 -> navController.navigate(Routes.HomeScreen)
@@ -154,10 +163,6 @@ fun App(firebaseAuth: FirebaseAuth ) {
                                     2 -> navController.navigate(Routes.CartScreen)
                                     3 -> navController.navigate(Routes.ProfileScreen)
                                 }
-
-
-
-
                             },
                             imageVector = navigationItem.icon,
                             label = navigationItem.name,
@@ -168,16 +173,12 @@ fun App(firebaseAuth: FirebaseAuth ) {
             }
         },
     ) { innerPadding ->
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = if (shouldShowBottomBar.value) innerPadding.calculateBottomPadding() else 0.dp)
         ) {
-
             NavHost(navController = navController, startDestination = startScreen) {
-
-
                 navigation<SubNavigation.LoginSingUpScreen>(startDestination = Routes.LoginScreen) {
                     composable<Routes.LoginScreen> {
                         LoginScreenUi(
@@ -192,10 +193,7 @@ fun App(firebaseAuth: FirebaseAuth ) {
                     }
                 }
 
-
                 navigation<SubNavigation.MainHomeScreen>(startDestination = Routes.HomeScreen) {
-
-
                     composable<Routes.HomeScreen> {
                         HomeScreenUi(
                             navController = navController
@@ -217,43 +215,25 @@ fun App(firebaseAuth: FirebaseAuth ) {
                             navController = navController
                         )
                     }
-                    composable<Routes.PayScreen> {
-                        Text(text = "Pay")
-                    }
-
-
-
 
                     composable<Routes.SeeAllProductsScreen> {
                         GetAllProducts(
                             navController = navController
                         )
-
                     }
 
                     composable<Routes.AllCategoriesScreen> {
                         AllCategoriesScreenUi(
                             navController = navController
                         )
-
-
                     }
-
                 }
-
-
-
-
-
-
 
                 composable<Routes.EachProductDetailsScreen> {
                     val product: Routes.EachProductDetailsScreen = it.toRoute()
                     EachProductDetailsScreenUi(
                         productID = product.productID,
                         navController = navController
-
-
                     )
                 }
 
@@ -264,27 +244,9 @@ fun App(firebaseAuth: FirebaseAuth ) {
                         navController = navController
                     )
                 }
-
-                composable<Routes.CheckoutScreen> {
-                    val product: Routes.EachProductDetailsScreen = it.toRoute()
-                    CheckOutScreenUi(
-                        productID = product.productID,
-                        navController = navController, )
-
-                }
-
-
             }
-
-
         }
-
     }
-
-
-
-
 }
-
 
 data class BottomNavItem(val name: String, val icon: ImageVector, val unseletedIcon: ImageVector)
